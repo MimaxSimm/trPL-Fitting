@@ -61,7 +61,7 @@ This script imports time-resolved photoluminescence (trPL) datasets, preprocesse
 ## Repository / dependency overview
 
 This script depends heavily on:
-- **`optimpv_github`** (custom optimization + rate equation fitting utilities)
+- **`optimpv_github`** (slightly edited optimPV code for fitting purposes)
 - **`trPL_Analysis`** from GitHub (`MimaxSimm/trPL_Analysis`) loaded via `httpimport`
 - **Ax + BoTorch + GPyTorch** for Bayesian optimization
 - **pySIMsalabim** (imported; not central in the shown functions, but part of the environment)
