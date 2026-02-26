@@ -1,0 +1,82 @@
+# README — trPL Rate-Equation Fitting + Bayesian Optimization Pipeline
+
+This script imports time-resolved photoluminescence (trPL) datasets, preprocesses them into a common fitting format, builds a multi-trap rate-equation model, and fits model parameters using Bayesian optimization (Ax + BoTorch) with optional follow-up refinement using SciPy optimization. Results (optimizers + fitted agents) are serialized to disk for later analysis/reuse.
+
+---
+
+## What this code does
+
+1. **Imports multiple trPL measurement folders**
+   - Loads raw trPL traces using `trPL_importClass.trPL_measurement_series`.
+   - Processes the last 4 power levels per dataset.
+   - Interpolates each trace onto a *logarithmically spaced* time axis.
+   - Builds a single concatenated dataframe per sample containing:
+     - `t`: time (s)
+     - `trPL`: PL intensity (a.u.)
+     - `G_frac`: relative generation scaling per power level
+
+2. **Estimates the initial carrier density `N0`**
+   - Computes absorbed carrier profile using Beer–Lambert:
+     - `n(z) = alpha * Fluence * exp(-alpha*z)`
+   - Averages over thickness to obtain `N0_ave` for each dataset.
+
+3. **Defines a baseline set of physical parameters**
+   - Builds a list of `FitParam` objects (from `optimpv`) representing:
+     - Bandgap, thickness, absorption, effective DOS, mobilities, radiative rate, trap densities, capture coefficients, trap energies, etc.
+   - Parameters are tagged as either:
+     - `fixed` (held constant during optimization)
+     - `range` (free variables to fit)
+   - Many parameters are optimized in log-space (`force_log=True`).
+
+4. **Constructs a rate-equation fitting agent**
+   - Creates a `RateEqAgent` configured for trPL fitting:
+     - Model: `DBTD_multi_trap` (solved via `LSODA`)
+     - Pump model: `initial_carrier_density`
+     - Metric: `nrmse`
+     - Comparison mode: `normalized_log` (with `G_frac` transformation enabled)
+     - Includes detection limit handling
+
+5. **Runs Bayesian optimization (Ax/BoTorch)**
+   - Uses:
+     - Sobol initialization (`SOBOL`)
+     - GP surrogate with Matérn kernel (`BOTORCH_MODULAR`)
+     - Acquisition: `qLogNoisyExpectedImprovement`
+   - Can apply parameter constraints (Ax-style linear constraints).
+
+6. **Tracks best fit and saves results**
+   - For each sample, runs multiple independent optimization rounds.
+   - Evaluates fit quality (NRMSE) and keeps best-performing `RateEqAgent`.
+   - Saves:
+     - `optimizer.pickle` (Ax/BoTorch optimizer state)
+     - `RateEqAgent.pickle` (fitted model agent)
+
+7. **Optionally refines fits across datasets with SciPy**
+   - After finding a best fit for one dataset, it:
+     - fixes mobilities (`mu_n`, `mu_p`) and `k_direct`
+     - refits other datasets using `ScipyOptimizer` (SLSQP)
+   - Saves SciPy optimizer + refined agent per dataset.
+
+---
+
+## Repository / dependency overview
+
+This script depends heavily on:
+- **`optimpv_github`** (custom optimization + rate equation fitting utilities)
+- **`trPL_Analysis`** from GitHub (`MimaxSimm/trPL_Analysis`) loaded via `httpimport`
+- **Ax + BoTorch + GPyTorch** for Bayesian optimization
+- **pySIMsalabim** (imported; not central in the shown functions, but part of the environment)
+
+Key libraries:
+- `numpy`, `pandas`, `matplotlib`
+- `torch`
+- `ax`, `botorch`, `gpytorch`
+- `pickle` for saving/loading results
+
+> Note: The code appends `../` to `sys.path` and imports `optimpv_github` from there. Ensure the expected folder structure exists.
+
+---
+
+## Folder structure expected
+
+The `__main__` block assumes local directories like:
+
